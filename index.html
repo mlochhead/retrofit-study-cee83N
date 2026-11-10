@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chinatown Retrofit Explorer</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb; --surface-2: #f0efec;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --other: #c3c2b7;
+  --ds-0: #cde2fb; --ds-1: #86b6ef; --ds-2: #3987e5; --ds-3: #1c5cab; --ds-4: #0d366b;
+  --critical: #d03b3b; --good-text: #006300; --focus: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19; --surface-2: #262624;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --other: #52514e;
+    --ds-0: #184f95; --ds-1: #256abf; --ds-2: #3987e5; --ds-3: #6da7ec; --ds-4: #b7d3f6;
+    --good-text: #0ca30c; --focus: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19; --surface-2: #262624;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --other: #52514e;
+  --ds-0: #184f95; --ds-1: #256abf; --ds-2: #3987e5; --ds-3: #6da7ec; --ds-4: #b7d3f6;
+  --good-text: #0ca30c; --focus: #3987e5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text-primary);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 24px 16px 8px; max-width: 1180px; margin: 0 auto; }
+h1 { font-size: 24px; margin: 0 0 4px; }
+h2 { font-size: 18px; margin: 0 0 4px; }
+h3 { font-size: 15px; margin: 0 0 4px; }
+p { margin: 4px 0 8px; }
+.sub { color: var(--text-secondary); }
+.muted { color: var(--text-muted); font-size: 13px; }
+main { max-width: 1180px; margin: 0 auto; padding: 0 16px 48px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--grid); margin: 12px 0 16px; flex-wrap: wrap; }
+.tab { border: 0; background: none; color: var(--text-secondary); font: inherit; font-weight: 600;
+  padding: 10px 14px; cursor: pointer; border-bottom: 2px solid transparent; }
+.tab[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--series-1); }
+.tab:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.panel[hidden] { display: none; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.grid2 > .card { margin-bottom: 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.card .tile { background: var(--surface-2); }
+.tile .label { color: var(--text-secondary); font-size: 13px; }
+.tile .value { font-size: 22px; font-weight: 600; }
+.tile .note { color: var(--text-muted); font-size: 12px; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+select, button.btn, input[type=file] { font: inherit; color: var(--text-primary); }
+select, button.btn, label.btn { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+button.btn, label.btn { cursor: pointer; font-weight: 600; }
+button.btn.primary { background: var(--series-1); color: #fff; border-color: transparent; }
+button.btn:disabled { opacity: .5; cursor: not-allowed; }
+.chart { width: 100%; position: relative; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart text { fill: var(--text-secondary); font-size: 12px; }
+.chart .val { fill: var(--text-primary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); margin: 4px 0 8px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--grid); text-align: right; font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-secondary); font-weight: 600; }
+td.win { font-weight: 700; }
+.tablewrap { overflow-x: auto; }
+#tooltip { position: fixed; pointer-events: none; z-index: 1000; background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  max-width: 260px; display: none; }
+#tooltip strong { display: block; font-size: 15px; }
+.map { height: 460px; border-radius: 8px; overflow: hidden; }
+.leaflet-container { background: var(--surface-2); font: inherit; }
+.progcard h2 i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 8px; }
+.uploads { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.upload { border: 1px dashed var(--axis); border-radius: 10px; padding: 12px; }
+.upload label { display: block; margin: 6px 0; }
+.upload .fname { color: var(--text-muted); font-size: 12px; word-break: break-all; }
+.callout { border-left: 3px solid var(--series-1); padding: 8px 12px; background: var(--surface-2); border-radius: 0 8px 8px 0; margin: 8px 0; }
+.themebtn { float: right; }
+@media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } .map { height: 360px; } h1 { font-size: 20px; } }
+</style>
+</head>
+<body>
+<header>
+  <button class="btn themebtn" id="themeBtn" type="button" aria-label="Toggle dark mode">Theme</button>
+  <h1>Chinatown Earthquake Retrofit Explorer</h1>
+  <p class="sub">Explore the building inventory, design two candidate retrofit programs, and compare their R2D results for a M7.2 San Andreas earthquake.</p>
+</header>
+<main>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-in" aria-controls="panel-in" aria-selected="true">1 · Explore the inventory</button>
+    <button class="tab" role="tab" id="tab-prog" aria-controls="panel-prog" aria-selected="false">2 · Design two programs</button>
+    <button class="tab" role="tab" id="tab-out" aria-controls="panel-out" aria-selected="false">3 · Compare R2D results</button>
+  </div>
+
+  <!-- ================= INPUT ================= -->
+  <section class="panel" id="panel-in" role="tabpanel" aria-labelledby="tab-in">
+    <div class="card">
+      <div class="row">
+        <span><strong>Inventory:</strong> <span id="invName">none loaded</span></span>
+        <label class="btn">Load inventory CSV<input type="file" id="invFile" accept=".csv" hidden></label>
+      </div>
+      <p class="muted" id="invHint"></p>
+    </div>
+    <div class="tiles" id="invTiles"></div>
+
+    <div class="card">
+      <div class="row">
+        <h2 style="margin-right:auto">By structural system</h2>
+        <label>Show <select id="metric">
+          <option value="n">Number of buildings</option>
+          <option value="pop">Residents</option>
+          <option value="value">Replacement value</option>
+          <option value="area">Floor area</option>
+          <option value="retro">Cost to retrofit (eligible buildings)</option>
+          <option value="ppb">Residents per building</option>
+          <option value="sfpp">Floor area per resident (sq ft)</option>
+        </select></label>
+      </div>
+      <p class="muted" id="metricNote"></p>
+      <div class="chart" id="sysChart"></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="row"><h2 style="margin-right:auto">Year built</h2>
+          <label>System <select id="yearSys"></select></label></div>
+        <p class="muted">Dashed lines: 1940 and 1975, the design-level boundaries used in this project.</p>
+        <div class="chart" id="yearChart"></div>
+      </div>
+      <div class="card">
+        <h2>Design level by system</h2>
+        <p class="muted">Number of buildings. Only buildings that are not High-Code are retrofitted by a program.</p>
+        <div class="tablewrap" id="dlTable"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row"><h2 style="margin-right:auto">Map</h2>
+        <label>Highlight <select id="mapSys"></select></label></div>
+      <p class="muted">Circle size = residents. Click a building for details.</p>
+      <div class="legend" id="mapLegend"></div>
+      <div class="map" id="mapIn"></div>
+    </div>
+
+    <div class="card">
+      <h2>Summary table</h2>
+      <div class="tablewrap" id="sumTable"></div>
+    </div>
+  </section>
+
+  <!-- ================= PROGRAMS ================= -->
+  <section class="panel" id="panel-prog" role="tabpanel" aria-labelledby="tab-prog" hidden>
+    <div class="card">
+      <h2>Design two candidate programs</h2>
+      <p>Each program is a <strong>retrofit requirement for one structural system</strong>: every building of that system that is not already High-Code must be retrofitted, and the <strong>building owners pay</strong>. Pick the two programs you think are the strongest candidates for your goal, run both in R2D, and recommend one.</p>
+    </div>
+    <div class="grid2">
+      <div class="card progcard" id="cardA">
+        <h2><i style="background:var(--series-2)"></i>Program A</h2>
+        <label>Structural system <select id="sysA"></select></label>
+        <div class="tiles" id="tilesA" style="margin-top:12px"></div>
+        <button class="btn primary" id="dlA" type="button" disabled>Download Program A inventory CSV</button>
+      </div>
+      <div class="card progcard" id="cardB">
+        <h2><i style="background:var(--series-3)"></i>Program B</h2>
+        <label>Structural system <select id="sysB"></select></label>
+        <div class="tiles" id="tilesB" style="margin-top:12px"></div>
+        <button class="btn primary" id="dlB" type="button" disabled>Download Program B inventory CSV</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Side by side</h3>
+      <div class="tablewrap" id="progTable"></div>
+      <p class="muted">The downloaded inventory replaces <code>StructureType</code>, <code>HeightClass</code> and <code>DesignLevel</code> with the <code>Retrofit…</code> columns for the buildings in the program. Load it into R2D for that program's run.</p>
+      <div class="callout">This tab shows what each program <em>covers</em> and what it <em>costs owners</em>. To find out what it <em>saves</em>, run R2D and use tab 3.</div>
+    </div>
+  </section>
+
+  <!-- ================= OUTPUT ================= -->
+  <section class="panel" id="panel-out" role="tabpanel" aria-labelledby="tab-out" hidden>
+    <div class="card">
+      <h2>Load your R2D results</h2>
+      <p class="muted">Use the results CSV exported from R2D (columns <code>AIM_id</code>, <code>MostLikelyCriticalDamageState</code>, <code>mean_RepairCost</code>, …) or <code>R2D_results.geojson</code>. Results are matched to buildings by ID; the inventory from tab 1 supplies structure type, residents and retrofit costs.</p>
+      <div class="uploads">
+        <div class="upload"><h3>Baseline (no retrofit)</h3>
+          <input type="file" id="fBase" accept=".geojson,.json,.csv" aria-label="Baseline results file">
+          <div class="fname" id="nBase">not loaded</div></div>
+        <div class="upload"><h3><span class="legend" style="display:inline"><i style="background:var(--series-2)"></i></span>Program A</h3>
+          <label>Retrofitted system <select id="outSysA"></select></label>
+          <input type="file" id="fA" accept=".geojson,.json,.csv" aria-label="Program A results file">
+          <div class="fname" id="nA">not loaded</div></div>
+        <div class="upload"><h3><span class="legend" style="display:inline"><i style="background:var(--series-3)"></i></span>Program B</h3>
+          <label>Retrofitted system <select id="outSysB"></select></label>
+          <input type="file" id="fB" accept=".geojson,.json,.csv" aria-label="Program B results file">
+          <div class="fname" id="nB">not loaded</div></div>
+      </div>
+      <p class="muted" id="outMsg">Load at least the baseline results to begin.</p>
+    </div>
+    <div id="outBody" hidden>
+      <div class="tiles" id="baseTiles"></div>
+      <div class="card"><h2>Program comparison</h2>
+        <p class="muted">Bold marks the better program on each line. "Savings" are repair costs avoided in this one earthquake.</p>
+        <div class="tablewrap" id="cmpTable"></div></div>
+      <div class="grid2">
+        <div class="card"><h2>Repair cost by system</h2><p class="muted">Mean repair cost from R2D.</p>
+          <div class="legend" id="lgLoss"></div><div class="chart" id="chLoss"></div></div>
+        <div class="card"><h2>Displaced residents by system</h2><p class="muted">Estimated from each building's most likely damage state (see note below).</p>
+          <div class="legend" id="lgDisp"></div><div class="chart" id="chDisp"></div></div>
+      </div>
+      <div class="card"><h2>Buildings by most likely damage state</h2>
+        <div class="legend" id="lgDS"></div><div class="chart" id="chDS"></div></div>
+      <div class="card">
+        <div class="row"><h2 style="margin-right:auto">Damage map</h2>
+          <label>Show <select id="mapRun"></select></label></div>
+        <div class="legend" id="dsLegend"></div>
+        <div class="map" id="mapOut"></div>
+      </div>
+      <div class="card"><h2>Results by system</h2><div class="tablewrap" id="outTable"></div>
+        <div class="row" style="margin-top:8px"><button class="btn" id="dlOut" type="button">Download combined results CSV</button></div>
+        <p class="muted"><strong>Displaced residents</strong> (Hazus shelter rule): residents of multi-unit buildings count as displaced at 90% if the most likely damage is Extensive (3) and 100% if Complete (4); single-family houses only at Complete. Using the most likely damage state is a simplification of the full damage distribution.</p>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="tooltip" role="status"></div>
+
+<script>
+'use strict';
+const SYS_ORDER = ['W1', 'W2', 'URM', 'C1', 'C2', 'S1'];
+const SYS_NAME = { W1: 'Wood light frame (houses)', W2: 'Wood frame, multi-unit', URM: 'Unreinforced masonry', C1: 'Concrete moment frame',
+  C2: 'Concrete shear wall', S1: 'Steel moment-frame high-rise', RM1: 'Reinforced masonry', RM2: 'Reinforced masonry (precast)',
+  C3: 'Concrete frame w/ masonry infill', S2: 'Steel braced frame', S4: 'Steel frame w/ concrete walls', S5: 'Steel frame w/ masonry infill' };
+const DS_NAME = ['None', 'Slight', 'Moderate', 'Extensive', 'Complete'];
+const DL_ORDER = ['Pre-Code', 'Low-Code', 'Moderate-Code', 'High-Code'];
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const $ = id => document.getElementById(id);
+const fmtInt = v => Math.round(v).toLocaleString('en-US');
+const fmtMoney = v => { const a = Math.abs(v), s = v < 0 ? '−' : '';
+  if (a >= 1e9) return s + '$' + (a / 1e9).toFixed(2) + 'B';
+  if (a >= 1e6) return s + '$' + (a / 1e6).toFixed(a >= 1e8 ? 0 : 1) + 'M';
+  if (a >= 1e3) return s + '$' + (a / 1e3).toFixed(0) + 'K';
+  return s + '$' + a.toFixed(0); };
+const fmtPct = v => isFinite(v) ? v.toFixed(1) + '%' : '–';
+const fmtMoney2 = v => !isFinite(v) ? '–' : Math.abs(v) >= 1e6 && Math.abs(v) < 1e8 ? '$' + (v / 1e6).toFixed(2) + 'M' : fmtMoney(v);
+const sysLabel = s => s + (SYS_NAME[s] ? ' · ' + SYS_NAME[s] : '');
+const num = v => { const x = parseFloat(v); return isFinite(x) ? x : 0; };
+
+let INV = [], INV_RAW = [], SYSTEMS = [];
+
+/* ---------- tooltip ---------- */
+const tip = $('tooltip');
+function showTip(ev, title, lines) {
+  tip.replaceChildren();
+  const s = document.createElement('strong'); s.textContent = title; tip.appendChild(s);
+  for (const l of lines) { const d = document.createElement('div'); d.textContent = l; tip.appendChild(d); }
+  tip.style.display = 'block';
+  tip.style.left = Math.min(ev.clientX + 14, window.innerWidth - tip.offsetWidth - 8) + 'px';
+  tip.style.top = Math.min(ev.clientY + 14, window.innerHeight - tip.offsetHeight - 8) + 'px';
+}
+const hideTip = () => { tip.style.display = 'none'; };
+
+/* ---------- SVG chart helpers ---------- */
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+// axis max = 4 clean steps (so every tick is a round number)
+function niceMax(v) { if (v <= 0) return 4; const raw = v / 4, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
+  const step = [1, 2, 2.5, 3, 4, 5, 6, 8, 10].find(c => f <= c) * p;
+  return 4 * (step < 1 && v >= 4 ? 1 : step); }
+function hbarPath(x0, y, w, h, r = 4) { r = Math.min(r, w, h / 2); if (w <= 0) return '';
+  return `M${x0},${y}H${x0 + w - r}Q${x0 + w},${y} ${x0 + w},${y + r}V${y + h - r}Q${x0 + w},${y + h} ${x0 + w - r},${y + h}H${x0}Z`; }
+function vbarPath(x, yBase, w, h, r = 4) { r = Math.min(r, h, w / 2); if (h <= 0) return '';
+  const yt = yBase - h; return `M${x},${yBase}V${yt + r}Q${x},${yt} ${x + r},${yt}H${x + w - r}Q${x + w},${yt} ${x + w},${yt + r}V${yBase}Z`; }
+
+function hbarChart(host, rows, fmt) {
+  host.replaceChildren();
+  const W = Math.max(host.clientWidth, 300), labelW = Math.min(240, W * 0.42), barH = 20, gap = 14, top = 4;
+  const H = top + rows.length * (barH + gap) + 18;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img' }, host);
+  const max = niceMax(Math.max(...rows.map(r => r.value), 0)), plotW = W - labelW - 70;
+  for (let i = 0; i <= 4; i++) { const x = labelW + plotW * i / 4;
+    el('line', { x1: x, x2: x, y1: 0, y2: H - 16, stroke: css('--grid'), 'stroke-width': 1 }, svg);
+    el('text', { x, y: H - 2, 'text-anchor': 'middle' }, svg).textContent = fmt(max * i / 4); }
+  rows.forEach((r, i) => {
+    const y = top + i * (barH + gap), w = plotW * r.value / max;
+    el('text', { x: labelW - 8, y: y + barH / 2 + 4, 'text-anchor': 'end' }, svg).textContent = r.label;
+    el('path', { d: hbarPath(labelW, y, w, barH), fill: css('--series-1') }, svg);
+    el('text', { x: labelW + w + 6, y: y + barH / 2 + 4, class: 'val' }, svg).textContent = fmt(r.value);
+    const hit = el('rect', { x: 0, y: y - gap / 2, width: W, height: barH + gap, fill: 'transparent' }, svg);
+    hit.addEventListener('pointermove', ev => showTip(ev, fmt(r.value), r.tip || [r.label]));
+    hit.addEventListener('pointerleave', hideTip);
+  });
+  el('line', { x1: labelW, x2: labelW, y1: 0, y2: H - 16, stroke: css('--axis'), 'stroke-width': 1 }, svg);
+}
+
+function columnChart(host, cats, series, fmt, opts = {}) {
+  host.replaceChildren();
+  const W = Math.max(host.clientWidth, 300), H = opts.height || 260, left = 64, bottom = opts.rotate ? 56 : 34, top = 18;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img' }, host);
+  const max = niceMax(Math.max(...series.flatMap(s => s.values), 0)), plotH = H - top - bottom, plotW = W - left - 8;
+  for (let i = 0; i <= 4; i++) { const y = top + plotH * (1 - i / 4);
+    el('line', { x1: left, x2: W - 8, y1: y, y2: y, stroke: css('--grid'), 'stroke-width': 1 }, svg);
+    el('text', { x: left - 6, y: y + 4, 'text-anchor': 'end' }, svg).textContent = fmt(max * i / 4); }
+  const band = plotW / cats.length, ns = series.length;
+  const bw = Math.min(24, (band * 0.75 - 2 * (ns - 1)) / ns), groupW = ns * bw + 2 * (ns - 1);
+  cats.forEach((c, i) => {
+    const gx = left + band * i + (band - groupW) / 2;
+    series.forEach((s, j) => { const h = plotH * s.values[i] / max;
+      el('path', { d: vbarPath(gx + j * (bw + 2), top + plotH, bw, h), fill: s.color }, svg); });
+    const lx = left + band * i + band / 2, ly = top + plotH + 16;
+    el('text', opts.rotate ? { x: lx, y: ly, 'text-anchor': 'end', transform: `rotate(-35 ${lx} ${ly})` } : { x: lx, y: ly, 'text-anchor': 'middle' }, svg).textContent = c;
+    const hit = el('rect', { x: left + band * i, y: top, width: band, height: plotH + 20, fill: 'transparent' }, svg);
+    hit.addEventListener('pointermove', ev => showTip(ev, opts.tipTitle ? opts.tipTitle(i) : c, series.map(s => `${s.name}: ${fmt(s.values[i])}`)));
+    hit.addEventListener('pointerleave', hideTip);
+  });
+  el('line', { x1: left, x2: W - 8, y1: top + plotH, y2: top + plotH, stroke: css('--axis'), 'stroke-width': 1 }, svg);
+  (opts.vlines || []).forEach(v => { const x = left + band * v.at;
+    el('line', { x1: x, x2: x, y1: top, y2: top + plotH, stroke: css('--text-muted'), 'stroke-width': 1, 'stroke-dasharray': '4 3' }, svg);
+    el('text', { x: x + 4, y: top + 10 }, svg).textContent = v.label; });
+}
+function legend(host, items) { host.replaceChildren();
+  for (const it of items) { const s = document.createElement('span'), i = document.createElement('i');
+    i.style.background = it.color; s.appendChild(i); s.appendChild(document.createTextNode(it.name)); host.appendChild(s); } }
+// rows: arrays of cell values, or {cells, win:[col indexes to bold]}
+function table(host, head, rows) {
+  const t = document.createElement('table'), th = document.createElement('thead'), tr = document.createElement('tr');
+  head.forEach(h => { const c = document.createElement('th'); c.textContent = h; tr.appendChild(c); }); th.appendChild(tr); t.appendChild(th);
+  const tb = document.createElement('tbody');
+  rows.forEach(r => { const cells = Array.isArray(r) ? r : r.cells, win = Array.isArray(r) ? [] : (r.win || []);
+    const rr = document.createElement('tr');
+    cells.forEach((v, j) => { const c = document.createElement('td'); c.textContent = v; if (win.includes(j)) c.className = 'win'; rr.appendChild(c); });
+    tb.appendChild(rr); });
+  t.appendChild(tb); host.replaceChildren(t); }
+function tiles(host, items) { host.replaceChildren();
+  for (const it of items) { const d = document.createElement('div'); d.className = 'tile';
+    for (const [k, v] of [['label', it.label], ['value', it.value], ['note', it.note]]) if (v != null) {
+      const e = document.createElement('div'); e.className = k; e.textContent = v; d.appendChild(e); }
+    host.appendChild(d); } }
+function fillSelect(sel, opts, keep) { const prev = keep ? sel.value : null; sel.replaceChildren();
+  opts.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); });
+  if (prev && opts.some(o => o[0] === prev)) sel.value = prev; }
+
+/* ---------- inventory ---------- */
+function normalizeInv(rows) {
+  return rows.filter(r => r.id !== undefined && r.id !== '').map(r => ({
+    ...r, id: String(r.id).trim(), StructureType: String(r.StructureType || '').trim(),
+    HeightClass: r.HeightClass || '', DesignLevel: r.DesignLevel || '',
+    NumberOfStories: num(r.NumberOfStories), PlanArea: num(r.PlanArea), YearBuilt: num(r.YearBuilt),
+    ReplacementCost: num(r.ReplacementCost), Population: num(r.Population), RetrofitCost: num(r.RetrofitCost),
+    Latitude: num(r.Latitude), Longitude: num(r.Longitude) }));
+}
+const eligible = b => b.DesignLevel !== 'High-Code';
+function setInventory(rows, name) {
+  INV_RAW = rows; INV = normalizeInv(rows);
+  const present = new Set(INV.map(b => b.StructureType));
+  SYSTEMS = SYS_ORDER.filter(s => present.has(s)).concat([...present].filter(s => !SYS_ORDER.includes(s)).sort());
+  $('invName').textContent = `${name} (${INV.length} buildings)`; $('invHint').textContent = '';
+  const all = [['*', 'All systems']].concat(SYSTEMS.map(s => [s, sysLabel(s)]));
+  fillSelect($('yearSys'), all, true); fillSelect($('mapSys'), all, true);
+  const progOpts = [['', 'Choose a system…']].concat(SYSTEMS.filter(s => INV.some(b => b.StructureType === s && eligible(b))).map(s => [s, sysLabel(s)]));
+  ['sysA', 'sysB', 'outSysA', 'outSysB'].forEach(id => fillSelect($(id), progOpts, true));
+  renderInput(); renderPrograms(); renderOutput();
+}
+function sysStats(s) {
+  const g = INV.filter(b => s === '*' || b.StructureType === s), el_ = g.filter(eligible);
+  const sum = (arr, f) => arr.reduce((a, b) => a + f(b), 0), gfa = b => b.PlanArea * b.NumberOfStories;
+  const pop = sum(g, b => b.Population), yrs = g.map(b => b.YearBuilt).sort((a, b) => a - b);
+  return { n: g.length, elig: el_.length, pop, value: sum(g, b => b.ReplacementCost), area: sum(g, gfa),
+    retro: sum(el_, b => b.RetrofitCost), ppb: g.length ? pop / g.length : 0,
+    sfpp: pop ? sum(g.filter(b => b.Population > 0), gfa) / pop : 0,
+    yrMed: yrs.length ? yrs[Math.floor(yrs.length / 2)] : 0, yrMin: yrs[0] || 0, yrMax: yrs[yrs.length - 1] || 0,
+    eligPop: sum(el_, b => b.Population), eligValue: sum(el_, b => b.ReplacementCost) };
+}
+const METRICS = {
+  n: { fmt: fmtInt, note: 'Count of buildings of each system.' },
+  pop: { fmt: fmtInt, note: 'Residents who sleep in these buildings at night.' },
+  value: { fmt: fmtMoney, note: 'Total replacement cost: what it would cost to rebuild them.' },
+  area: { fmt: v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : fmtInt(v), note: 'Total floor area in square feet.' },
+  retro: { fmt: fmtMoney, note: 'What owners would pay in total if every building of this system that is not already High-Code were retrofitted.' },
+  ppb: { fmt: v => v.toFixed(1), note: 'Average residents per building.' },
+  sfpp: { fmt: fmtInt, note: 'Floor area of residential buildings per resident (shops and offices left out). Smaller = more crowded.' },
+};
+function renderInput() {
+  if (!INV.length) return;
+  const all = sysStats('*');
+  tiles($('invTiles'), [
+    { label: 'Buildings', value: fmtInt(all.n) },
+    { label: 'Residents', value: fmtInt(all.pop) },
+    { label: 'Replacement value', value: fmtMoney(all.value) },
+    { label: 'Buildings that are not High-Code', value: fmtInt(all.elig), note: 'candidates for retrofit' },
+  ]);
+  renderSysChart(); renderYear(); renderDL(); renderMapIn();
+  table($('sumTable'), ['System', 'Buildings', 'Not High-Code', 'Residents', 'Res./bldg', 'Sq ft/resident (residential)', 'Value', 'Retrofit cost', 'Year built (median, range)'],
+    SYSTEMS.map(s => { const t = sysStats(s); return [sysLabel(s), fmtInt(t.n), fmtInt(t.elig), fmtInt(t.pop), t.ppb.toFixed(1),
+      t.pop ? fmtInt(t.sfpp) : '–', fmtMoney(t.value), fmtMoney(t.retro), `${t.yrMed} (${t.yrMin}–${t.yrMax})`]; }));
+}
+function renderSysChart() {
+  const m = $('metric').value, M = METRICS[m]; $('metricNote').textContent = M.note;
+  let rows = SYSTEMS.map(s => { const t = sysStats(s); return { label: sysLabel(s), value: t[m],
+    tip: [sysLabel(s), `${fmtInt(t.n)} buildings (${fmtInt(t.elig)} not High-Code)`, `${fmtInt(t.pop)} residents`, `${fmtMoney(t.value)} value`, `${fmtMoney(t.retro)} to retrofit`] }; });
+  if (m === 'sfpp') rows = rows.filter(r => r.value > 0);
+  hbarChart($('sysChart'), rows, M.fmt);
+}
+function renderYear() {
+  const s = $('yearSys').value, g = INV.filter(b => s === '*' || b.StructureType === s);
+  const lo = 1900, hi = 2020, step = 10, bins = [];
+  for (let y = lo; y < hi; y += step) bins.push({ y, n: 0 });
+  g.forEach(b => { bins[Math.min(bins.length - 1, Math.max(0, Math.floor((b.YearBuilt - lo) / step)))].n++; });
+  columnChart($('yearChart'), bins.map(b => `${b.y}s`), [{ name: 'Buildings', color: css('--series-1'), values: bins.map(b => b.n) }],
+    fmtInt, { rotate: true, height: 240, vlines: [{ at: (1940 - lo) / step, label: '1940' }, { at: (1975 - lo) / step, label: '1975' }] });
+}
+function renderDL() {
+  const dls = DL_ORDER.filter(d => INV.some(b => b.DesignLevel === d));
+  table($('dlTable'), ['System'].concat(dls),
+    SYSTEMS.map(s => [s].concat(dls.map(d => { const n = INV.filter(b => b.StructureType === s && b.DesignLevel === d).length; return n ? fmtInt(n) : '·'; }))));
+}
+
+/* ---------- maps ---------- */
+const maps = {};
+function baseMap(id) {
+  if (maps[id]) return maps[id];
+  const m = L.map(id, { scrollWheelZoom: false });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(m);
+  maps[id] = { map: m, layer: L.layerGroup().addTo(m), fitted: false }; return maps[id];
+}
+function fit(M) { if (!M.fitted && INV.length) { M.map.fitBounds(INV.map(b => [b.Latitude, b.Longitude]), { padding: [20, 20] }); M.fitted = true; } }
+function popupFor(b, extra = []) {
+  const d = document.createElement('div'), h = document.createElement('strong');
+  h.textContent = `Building ${b.id} · ${b.StructureType}`; d.appendChild(h);
+  [SYS_NAME[b.StructureType] || '', `${b.NumberOfStories} stories · built ${b.YearBuilt} · ${b.DesignLevel}`,
+   `${b.OccupancyClass || ''} · ${fmtInt(b.Population)} residents`, `Value ${fmtMoney(b.ReplacementCost)} · retrofit ${fmtMoney(b.RetrofitCost)}`].concat(extra)
+    .filter(Boolean).forEach(t => { const p = document.createElement('div'); p.textContent = t; d.appendChild(p); });
+  return d;
+}
+const radius = p => 3 + Math.sqrt(p) * 0.9;
+function renderMapIn() {
+  if (typeof L === 'undefined') { $('mapIn').textContent = 'Map library could not load (offline?).'; return; }
+  const M = baseMap('mapIn'), sel = $('mapSys').value; M.layer.clearLayers();
+  const hi = css('--series-1'), lo = css('--other'), ring = css('--surface-1');
+  INV.slice().sort((a, b) => (a.StructureType === sel) - (b.StructureType === sel)).forEach(b => { const on = sel === '*' || b.StructureType === sel;
+    L.circleMarker([b.Latitude, b.Longitude], { radius: radius(b.Population), color: ring, weight: 1.5, fillColor: on ? hi : lo,
+      fillOpacity: on ? 0.85 : 0.5 }).bindPopup(popupFor(b)).addTo(M.layer); });
+  legend($('mapLegend'), sel === '*' ? [{ name: 'All buildings', color: hi }] : [{ name: sysLabel(sel), color: hi }, { name: 'Other systems', color: lo }]);
+  fit(M);
+}
+
+/* ---------- programs ---------- */
+function programStats(s) {
+  const g = INV.filter(b => b.StructureType === s && eligible(b)), all = sysStats('*');
+  const cost = g.reduce((a, b) => a + b.RetrofitCost, 0), value = g.reduce((a, b) => a + b.ReplacementCost, 0), pop = g.reduce((a, b) => a + b.Population, 0);
+  return { n: g.length, cost, value, pop, perBldg: g.length ? cost / g.length : 0, pctValue: value ? 100 * cost / value : NaN,
+    perRes: pop ? cost / pop : NaN, shareValue: 100 * value / all.value, sharePop: 100 * pop / all.pop };
+}
+function renderPrograms() {
+  if (!INV.length) { for (const k of ['A', 'B']) { tiles($('tiles' + k), [{ label: 'No inventory loaded', value: '–', note: 'Load the inventory CSV in tab 1 first' }]); $('dl' + k).disabled = true; } return; }
+  for (const k of ['A', 'B']) {
+    const s = $('sys' + k).value;
+    if (!s) { tiles($('tiles' + k), [{ label: 'No system chosen', value: '–', note: 'Pick a structural system above' }]); $('dl' + k).disabled = true; continue; }
+    const p = programStats(s);
+    tiles($('tiles' + k), [
+      { label: 'Buildings retrofitted', value: fmtInt(p.n), note: `${fmtInt(sysStats(s).n - p.n)} ${s} buildings already High-Code` },
+      { label: 'Residents in them', value: fmtInt(p.pop), note: `${fmtPct(p.sharePop)} of Chinatown residents` },
+      { label: 'Value of those buildings', value: fmtMoney(p.value), note: `${fmtPct(p.shareValue)} of all building value` },
+      { label: 'Total cost to owners', value: fmtMoney(p.cost) },
+      { label: 'Average cost per building', value: fmtMoney2(p.perBldg) },
+      { label: 'Cost as % of building value', value: fmtPct(p.pctValue) },
+    ]);
+    $('dl' + k).disabled = false;
+  }
+  const sA = $('sysA').value, sB = $('sysB').value;
+  if (!sA && !sB) { $('progTable').replaceChildren(); return; }
+  const pA = sA ? programStats(sA) : null, pB = sB ? programStats(sB) : null, v = (p, f, fmt) => p ? fmt(p[f]) : '–';
+  table($('progTable'), ['', `Program A${sA ? ' · ' + sA : ''}`, `Program B${sB ? ' · ' + sB : ''}`], [
+    ['Buildings retrofitted', v(pA, 'n', fmtInt), v(pB, 'n', fmtInt)],
+    ['Residents in those buildings', v(pA, 'pop', fmtInt), v(pB, 'pop', fmtInt)],
+    ['Value of those buildings', v(pA, 'value', fmtMoney), v(pB, 'value', fmtMoney)],
+    ['Total cost to owners', v(pA, 'cost', fmtMoney), v(pB, 'cost', fmtMoney)],
+    ['Average cost per building', v(pA, 'perBldg', fmtMoney2), v(pB, 'perBldg', fmtMoney2)],
+    ['Cost as % of building value', v(pA, 'pctValue', fmtPct), v(pB, 'pctValue', fmtPct)],
+    ['Cost per resident of those buildings', v(pA, 'perRes', fmtMoney), v(pB, 'perRes', fmtMoney)],
+  ]);
+}
+function downloadCSV(rows, name) {
+  const blob = new Blob([Papa.unparse(rows)], { type: 'text/csv' }), a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function downloadProgram(k) {
+  const s = $('sys' + k).value; if (!s) return;
+  downloadCSV(INV_RAW.map(r => (String(r.StructureType).trim() === s && r.DesignLevel !== 'High-Code')
+    ? { ...r, StructureType: r.RetrofitStructureType, HeightClass: r.RetrofitHeightClass ?? r.HeightClass, DesignLevel: r.RetrofitDesignLevel || 'High-Code' } : r),
+    `inventory_program${k}_${s}.csv`);
+}
+['A', 'B'].forEach(k => {
+  $('dl' + k).addEventListener('click', () => downloadProgram(k));
+  $('sys' + k).addEventListener('change', () => { $('outSys' + k).value = $('sys' + k).value; renderPrograms(); renderOutput(); });
+  $('outSys' + k).addEventListener('change', () => { $('sys' + k).value = $('outSys' + k).value; renderPrograms(); renderOutput(); });
+});
+
+/* ---------- results ---------- */
+const RES = { base: null, A: null, B: null };
+function findKey(keys, tests) { for (const t of tests) { const k = keys.find(k => t.test(k)); if (k) return k; } return null; }
+function parseResults(text, name) {
+  let rows;
+  if (/\.(geo)?json$/i.test(name) || text.trim().startsWith('{')) rows = (JSON.parse(text).features || []).map(f => f.properties || {});
+  else rows = Papa.parse(text, { header: true, skipEmptyLines: true }).data;
+  if (!rows.length) throw new Error('No rows found');
+  const keys = Object.keys(rows[0]);
+  const kId = findKey(keys, [/^AIM_id$/i, /^id$/i, /^asset.?id$/i, /id$/i]);
+  const kCost = findKey(keys, [/mean_RepairCost$/i, /^mean.*repair.?cost(?!.*ratio)/i, /repair.?cost(?!.*(ratio|std))/i]);
+  const kDS = findKey(keys, [/MostLikelyCriticalDamageState/i, /damage.?state/i, /^DS$/i]);
+  const kTime = findKey(keys, [/mean_RepairTime/i, /repair.?time(?!.*std)/i]);
+  if (!kId || !kCost) throw new Error(`Could not find an ID and a repair-cost column (found: ${keys.slice(0, 12).join(', ')}…)`);
+  const m = new Map();
+  rows.forEach(r => { const id = String(r[kId]).trim(); if (id) m.set(id, { cost: num(r[kCost]), ds: kDS ? num(r[kDS]) : NaN, time: kTime ? num(r[kTime]) : NaN }); });
+  return { name, map: m };
+}
+// Hazus shelter weights, interpolated for half damage states (ties in R2D's most-likely state)
+function dispWeight(ds, occ) { if (!isFinite(ds)) return 0;
+  const pts = occ === 'RES1' ? [[3, 0], [4, 1]] : [[2, 0], [3, 0.9], [4, 1]];
+  if (ds <= pts[0][0]) return 0; if (ds >= 4) return 1;
+  for (let i = 1; i < pts.length; i++) if (ds <= pts[i][0]) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; return y0 + (y1 - y0) * (ds - x0) / (x1 - x0); }
+  return 0; }
+function readFile(input, cb) { const f = input.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => cb(r.result, f.name); r.readAsText(f); }
+function loadRun(key, text, name) {
+  const lab = { base: 'nBase', A: 'nA', B: 'nB' }[key];
+  try { RES[key] = parseResults(text, name); $(lab).textContent = `${name} · ${RES[key].map.size} buildings`; renderOutput(); }
+  catch (err) { $(lab).textContent = 'Error: ' + err.message; }
+}
+$('fBase').addEventListener('change', e => readFile(e.target, (t, n) => loadRun('base', t, n)));
+$('fA').addEventListener('change', e => readFile(e.target, (t, n) => loadRun('A', t, n)));
+$('fB').addEventListener('change', e => readFile(e.target, (t, n) => loadRun('B', t, n)));
+
+const RUN_META = () => [
+  { key: 'base', name: 'Baseline', color: css('--series-1') },
+  { key: 'A', name: `Program A${$('outSysA').value ? ' (' + $('outSysA').value + ')' : ''}`, color: css('--series-2') },
+  { key: 'B', name: `Program B${$('outSysB').value ? ' (' + $('outSysB').value + ')' : ''}`, color: css('--series-3') },
+];
+let OUT = [];
+function renderOutput() {
+  if (!RES.base || !INV.length) { $('outBody').hidden = true;
+    $('outMsg').textContent = !INV.length ? 'Load the inventory CSV in tab 1 first, then load your results here.' : 'Load at least the baseline results to begin.'; return; }
+  $('outBody').hidden = false;
+  const runs = RUN_META().filter(r => RES[r.key]);
+  let unmatched = 0;
+  OUT = INV.map(b => { const o = { b };
+    for (const r of runs) { const x = RES[r.key].map.get(b.id); if (!x && r.key === 'base') unmatched++;
+      o[r.key] = x ? { ...x, disp: b.Population * dispWeight(x.ds, b.OccupancyClass) } : { cost: 0, ds: NaN, time: NaN, disp: 0 }; }
+    return o; });
+  const msgs = [];
+  if (unmatched) msgs.push(`${unmatched} inventory buildings were not found in the baseline results (check that IDs match).`);
+  for (const k of ['A', 'B']) if (RES[k] && !$('outSys' + k).value) msgs.push(`Choose which system Program ${k} retrofitted to compute its cost.`);
+  $('outMsg').textContent = msgs.join(' ');
+  const tot = (k, f) => OUT.reduce((a, o) => a + o[k][f], 0);
+  const L0 = tot('base', 'cost'), D0 = tot('base', 'disp');
+  const allValue = INV.reduce((a, b) => a + b.ReplacementCost, 0), allPop = INV.reduce((a, b) => a + b.Population, 0);
+  tiles($('baseTiles'), [
+    { label: 'Baseline repair cost', value: fmtMoney(L0), note: `${fmtPct(100 * L0 / allValue)} of building value` },
+    { label: 'Baseline displaced residents', value: fmtInt(D0), note: `of ${fmtInt(allPop)} residents` },
+  ]);
+
+  // program comparison table
+  const P = {};
+  for (const k of ['A', 'B']) {
+    const s = $('outSys' + k).value, ps = s ? programStats(s) : null;
+    if (!RES[k]) { P[k] = null; continue; }
+    const L = tot(k, 'cost'), D = tot(k, 'disp'), saved = L0 - L, prot = D0 - D, cost = ps ? ps.cost : NaN;
+    P[k] = { s, L, D, saved, prot, cost, bcr: cost ? saved / cost : NaN, net: saved - cost,
+      perPerson: prot > 0 ? cost / prot : NaN, perBldg: ps ? ps.perBldg : NaN, pctValue: ps ? ps.pctValue : NaN, n: ps ? ps.n : NaN };
+  }
+  const lines = [
+    ['System retrofitted', p => p.s || '?', null],
+    ['Buildings retrofitted', p => fmtInt(p.n), null],
+    ['Repair cost in this earthquake', p => fmtMoney(p.L), 'low', p => p.L],
+    ['Savings (repair cost avoided)', p => fmtMoney(p.saved), 'high', p => p.saved],
+    ['Savings as % of baseline repair cost', p => fmtPct(100 * p.saved / L0), 'high', p => p.saved],
+    ['Displaced residents', p => fmtInt(p.D), 'low', p => p.D],
+    ['Residents protected', p => fmtInt(p.prot), 'high', p => p.prot],
+    ['Total cost to owners', p => isFinite(p.cost) ? fmtMoney(p.cost) : '?', 'low', p => p.cost],
+    ['Benefit–cost ratio (savings ÷ cost)', p => isFinite(p.bcr) ? p.bcr.toFixed(2) + (p.bcr >= 1 ? '  ✓ pays for itself' : '  ✕ costs more than it saves') : '?', 'high', p => p.bcr],
+    ['Net benefit (savings − cost)', p => isFinite(p.net) ? fmtMoney(p.net) : '?', 'high', p => p.net],
+    ['Cost per resident protected', p => isFinite(p.perPerson) ? fmtMoney(p.perPerson) : '–', 'low', p => p.perPerson],
+    ['Average cost per building (owner)', p => fmtMoney2(p.perBldg), 'low', p => p.perBldg],
+    ['Cost as % of building value (owner)', p => fmtPct(p.pctValue), 'low', p => p.pctValue],
+  ];
+  const cols = ['A', 'B'].filter(k => P[k]);
+  if (cols.length) {
+    table($('cmpTable'), [''].concat(cols.map(k => RUN_META().find(r => r.key === k).name)), lines.map(([lab, f, better, val]) => {
+      const cells = [lab].concat(cols.map(k => f(P[k]))), win = [];
+      if (better && cols.length === 2) { const a = val(P.A), b = val(P.B);
+        if (isFinite(a) && isFinite(b) && cells[1] !== cells[2]) win.push(((better === 'high') === (a > b)) ? 1 : 2); }
+      return { cells, win }; }));
+  } else $('cmpTable').textContent = 'Load Program A and/or Program B results to compare them.';
+
+  const lg = runs.map(r => ({ name: r.name, color: r.color }));
+  legend($('lgLoss'), lg); legend($('lgDisp'), lg); legend($('lgDS'), lg);
+  const bySys = (k, f) => SYSTEMS.map(s => OUT.filter(o => o.b.StructureType === s).reduce((a, o) => a + o[k][f], 0));
+  const ser = f => runs.map(r => ({ name: r.name, color: r.color, values: bySys(r.key, f) }));
+  const tipSys = i => sysLabel(SYSTEMS[i]);
+  columnChart($('chLoss'), SYSTEMS, ser('cost'), fmtMoney, { tipTitle: tipSys });
+  columnChart($('chDisp'), SYSTEMS, ser('disp'), fmtInt, { tipTitle: tipSys });
+  columnChart($('chDS'), DS_NAME.map((n, i) => `${i} ${n}`),
+    runs.map(r => ({ name: r.name, color: r.color, values: [0, 1, 2, 3, 4].map(d => OUT.filter(o => Math.round(o[r.key].ds) === d).length) })), fmtInt, { height: 220 });
+
+  fillSelect($('mapRun'), runs.map(r => [r.key, r.name]), true);
+  renderMapOut();
+  const head = ['System', 'Buildings'].concat(runs.map(r => `Repair cost · ${r.name}`)).concat(runs.map(r => `Displaced · ${r.name}`));
+  table($('outTable'), head, SYSTEMS.map(s => { const g = OUT.filter(o => o.b.StructureType === s), a = (k, f) => g.reduce((x, o) => x + o[k][f], 0);
+    return [sysLabel(s), fmtInt(g.length)].concat(runs.map(r => fmtMoney(a(r.key, 'cost')))).concat(runs.map(r => fmtInt(a(r.key, 'disp')))); }));
+}
+function renderMapOut() {
+  if (typeof L === 'undefined' || !RES.base) return;
+  const M = baseMap('mapOut'), k = RES[$('mapRun').value] ? $('mapRun').value : 'base'; M.layer.clearLayers();
+  const cols = [0, 1, 2, 3, 4].map(i => css(`--ds-${i}`)), ring = css('--surface-1');
+  const progSys = k === 'base' ? null : $('outSys' + k).value;
+  OUT.forEach(o => { const r = o[k], ds = r.ds, c = isFinite(ds) ? cols[Math.max(0, Math.min(4, Math.round(ds)))] : css('--other');
+    const retro = progSys && o.b.StructureType === progSys && eligible(o.b);
+    L.circleMarker([o.b.Latitude, o.b.Longitude], { radius: radius(o.b.Population), color: ring, weight: 1.5, fillColor: c, fillOpacity: 0.9 })
+      .bindPopup(popupFor(o.b, [`Most likely damage: ${isFinite(ds) ? ds + ' ' + (DS_NAME[Math.round(ds)] || '') : 'n/a'}`,
+        `Repair cost ${fmtMoney(r.cost)}${isFinite(r.time) ? ' · ' + fmtInt(r.time) + ' days' : ''}`, `Displaced ≈ ${fmtInt(r.disp)}`,
+        retro ? 'Retrofitted in this program' : ''])).addTo(M.layer); });
+  legend($('dsLegend'), DS_NAME.map((n, i) => ({ name: `${i} ${n}`, color: cols[i] })));
+  fit(M);
+}
+$('mapRun').addEventListener('change', renderMapOut);
+$('dlOut').addEventListener('click', () => {
+  const runs = RUN_META().filter(r => RES[r.key]);
+  downloadCSV(OUT.map(o => { const row = { id: o.b.id, StructureType: o.b.StructureType, DesignLevel: o.b.DesignLevel, Population: o.b.Population,
+    ReplacementCost: o.b.ReplacementCost, RetrofitCost: o.b.RetrofitCost };
+    for (const r of runs) { const p = r.key === 'base' ? 'Baseline' : 'Program' + r.key;
+      if (r.key !== 'base') row[p + '_Retrofitted'] = o.b.StructureType === $('outSys' + r.key).value && eligible(o.b);
+      row[p + '_RepairCost'] = o[r.key].cost; row[p + '_DS'] = o[r.key].ds; row[p + '_Displaced'] = o[r.key].disp.toFixed(2); }
+    return row; }), 'combined_results.csv');
+});
+
+/* ---------- tabs, theme, startup ---------- */
+const TABS = [['tab-in', 'panel-in'], ['tab-prog', 'panel-prog'], ['tab-out', 'panel-out']];
+function selectTab(id) { TABS.forEach(([t, p]) => { const on = t === id; $(t).setAttribute('aria-selected', on); $(p).hidden = !on; });
+  setTimeout(() => { Object.values(maps).forEach(m => m.map.invalidateSize()); rerender(); }, 0); try { localStorage.setItem('tab', id); } catch (e) {} }
+TABS.forEach(([t]) => $(t).addEventListener('click', () => selectTab(t)));
+function rerender() { if (!INV.length) return; renderSysChart(); renderYear(); renderOutput(); }
+$('metric').addEventListener('change', renderSysChart);
+$('yearSys').addEventListener('change', renderYear);
+$('mapSys').addEventListener('change', renderMapIn);
+let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(rerender, 150); });
+$('themeBtn').addEventListener('click', () => { const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark'; try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
+  renderInput(); renderOutput(); });
+try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+$('invFile').addEventListener('change', e => readFile(e.target, (t, n) => setInventory(Papa.parse(t, { header: true, skipEmptyLines: true }).data, n)));
+const q = new URLSearchParams(location.search);
+$('invHint').textContent = 'Click "Load inventory CSV" and choose the building inventory file from wherever you saved it (e.g. the inventory CSV provided for the class).';
+// The inventory is chosen by the user. A demo link may name one with ?inv=path/to/inventory.csv
+const invReady = !q.get('inv') ? Promise.resolve() : fetch(q.get('inv')).then(r => { if (!r.ok) throw new Error(q.get('inv')); return r.text(); })
+  .then(t => setInventory(Papa.parse(t, { header: true, skipEmptyLines: true }).data, q.get('inv').split('/').pop()));
+renderPrograms(); renderOutput();
+try { const t = localStorage.getItem('tab'); if (t && $(t) && !q.get('tab')) selectTab(t); } catch (e) {}
+
+/* Optional demo links: index.html?inv=data/inventory.csv&tab=tab-out&base=data/base.csv&a=data/progA.csv&asys=URM&b=data/progB.csv&bsys=C1 */
+(function () {
+  if (q.get('tab') && $(q.get('tab'))) selectTab(q.get('tab'));
+  const get = p => fetch(p).then(r => { if (!r.ok) throw new Error(p); return r.text(); });
+  invReady.then(() => {
+    for (const k of ['A', 'B']) { const s = q.get(k.toLowerCase() + 'sys'); if (s) { $('sys' + k).value = s; $('outSys' + k).value = s; } }
+    renderPrograms();
+    const jobs = [['base', q.get('base')], ['A', q.get('a')], ['B', q.get('b')]].filter(j => j[1]);
+    return Promise.all(jobs.map(([k, p]) => get(p).then(t => loadRun(k, t, p))));
+  }).catch(err => { $('outMsg').textContent = 'Could not load demo file: ' + err.message; });
+})();
+</script>
+</body>
+</html>
