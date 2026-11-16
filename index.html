@@ -217,7 +217,7 @@ td.win { font-weight: 700; }
     <div id="outBody" hidden>
       <div class="tiles" id="baseTiles"></div>
       <div class="card"><h2>Program comparison</h2>
-        <p class="muted">Bold marks the better program on each line. "Savings" are repair costs avoided in this one earthquake.</p>
+        <p class="muted">The Baseline column shows the existing buildings with no retrofit. Bold marks the better of the two programs on each line. "Savings" are repair costs avoided in this one earthquake.</p>
         <div class="tablewrap" id="cmpTable"></div></div>
       <div class="grid2">
         <div class="card"><h2>Repair cost by system</h2><p class="muted">Mean repair cost from R2D.</p>
@@ -593,6 +593,8 @@ function renderOutput() {
     P[k] = { s, L, D, saved, prot, cost, bcr: cost ? saved / cost : NaN, net: saved - cost,
       perPerson: prot > 0 ? cost / prot : NaN, perBldg: ps ? ps.perBldg : NaN, pctValue: ps ? ps.pctValue : NaN, n: ps ? ps.n : NaN };
   }
+  // Baseline column (no retrofit): only absolute results apply; program-only metrics show a dash
+  const baseCells = ['None (existing buildings)', '0', fmtMoney(L0), '–', '–', fmtInt(D0), '–', fmtMoney(0), '–', '–', '–', '–', '–'];
   const lines = [
     ['System retrofitted', p => p.s || '?', null],
     ['Buildings retrofitted', p => fmtInt(p.n), null],
@@ -610,10 +612,10 @@ function renderOutput() {
   ];
   const cols = ['A', 'B'].filter(k => P[k]);
   if (cols.length) {
-    table($('cmpTable'), [''].concat(cols.map(k => RUN_META().find(r => r.key === k).name)), lines.map(([lab, f, better, val]) => {
-      const cells = [lab].concat(cols.map(k => f(P[k]))), win = [];
+    table($('cmpTable'), ['', 'Baseline'].concat(cols.map(k => RUN_META().find(r => r.key === k).name)), lines.map(([lab, f, better, val], i) => {
+      const cells = [lab, baseCells[i]].concat(cols.map(k => f(P[k]))), win = [];
       if (better && cols.length === 2) { const a = val(P.A), b = val(P.B);
-        if (isFinite(a) && isFinite(b) && cells[1] !== cells[2]) win.push(((better === 'high') === (a > b)) ? 1 : 2); }
+        if (isFinite(a) && isFinite(b) && cells[2] !== cells[3]) win.push(((better === 'high') === (a > b)) ? 2 : 3); }
       return { cells, win }; }));
   } else $('cmpTable').textContent = 'Load Program A and/or Program B results to compare them.';
 
