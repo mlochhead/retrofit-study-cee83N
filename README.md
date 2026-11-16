@@ -2,7 +2,7 @@
 
 Class materials for the R2D exercise.
 
-- `project_instructions.md`: Instructions for the R2D exercise (same as PDF posted on Canvas)
+- `project_instructions.md`: Instructions for the R2D exercise
 - `index.html`: Data explorer website
 - `data/chinatown_buildings_example.csv`: Building inventory prior to retrofit
 - `data/San_Andreas_Mw72.zip`: Folder of ground motions for scenario earthquake (same as R2D Example 1); unzip before loading into R2D
