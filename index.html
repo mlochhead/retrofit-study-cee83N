@@ -222,7 +222,7 @@ td.win { font-weight: 700; }
       <div class="grid2">
         <div class="card"><h2>Repair cost by system</h2><p class="muted">Mean repair cost from R2D.</p>
           <div class="legend" id="lgLoss"></div><div class="chart" id="chLoss"></div></div>
-        <div class="card"><h2>Displaced residents by system</h2><p class="muted">Estimated from each building's most likely damage state (see note below).</p>
+        <div class="card"><h2>Displaced residents by system</h2><p class="muted">Expected displaced residents, estimated from each building's loss ratio (see note below).</p>
           <div class="legend" id="lgDisp"></div><div class="chart" id="chDisp"></div></div>
       </div>
       <div class="card"><h2>Buildings by most likely damage state</h2>
@@ -235,7 +235,7 @@ td.win { font-weight: 700; }
       </div>
       <div class="card"><h2>Results by system</h2><div class="tablewrap" id="outTable"></div>
         <div class="row" style="margin-top:8px"><button class="btn" id="dlOut" type="button">Download combined results CSV</button></div>
-        <p class="muted"><strong>Displaced residents</strong> (Hazus shelter rule): residents of multi-unit buildings count as displaced at 90% if the most likely damage is Extensive (3) and 100% if Complete (4); single-family houses only at Complete. Using the most likely damage state is a simplification of the full damage distribution.</p>
+        <p class="muted"><strong>How displaced residents are estimated:</strong> people lose their homes when a building is badly damaged (Extensive or Complete damage in Hazus). R2D runs thousands of possible versions of the earthquake, and each building's <em>loss ratio</em> (repair cost ÷ cost to rebuild) shows how badly it was damaged on average across them. The more a building is expected to cost to repair, the more of its residents are expected to be displaced. For apartment buildings and SROs, the share of residents displaced is 1.4 × (loss ratio − 0.02), up to 100%; a building with a 30% loss ratio displaces about 40% of its residents. Single-family houses count only if they are likely to be completely destroyed.</p>
       </div>
     </div>
   </section>
@@ -529,17 +529,20 @@ function parseResults(text, name) {
   const kCost = findKey(keys, [/mean_RepairCost$/i, /^mean.*repair.?cost(?!.*ratio)/i, /repair.?cost(?!.*(ratio|std))/i]);
   const kDS = findKey(keys, [/MostLikelyCriticalDamageState/i, /damage.?state/i, /^DS$/i]);
   const kTime = findKey(keys, [/mean_RepairTime/i, /repair.?time(?!.*std)/i]);
+  const kLR = findKey(keys, [/^mean_RepairCost_loss_ratio$/i, /^mean.*loss.?ratio/i]);
   if (!kId || !kCost) throw new Error(`Could not find an ID and a repair-cost column (found: ${keys.slice(0, 12).join(', ')}…)`);
   const m = new Map();
-  rows.forEach(r => { const id = String(r[kId]).trim(); if (id) m.set(id, { cost: num(r[kCost]), ds: kDS ? num(r[kDS]) : NaN, time: kTime ? num(r[kTime]) : NaN }); });
+  rows.forEach(r => { const id = String(r[kId]).trim(); if (id) m.set(id, { cost: num(r[kCost]), ds: kDS ? num(r[kDS]) : NaN, time: kTime ? num(r[kTime]) : NaN, lr: kLR ? num(r[kLR]) : NaN }); });
   return { name, map: m };
 }
-// Hazus shelter weights, interpolated for half damage states (ties in R2D's most-likely state)
-function dispWeight(ds, occ) { if (!isFinite(ds)) return 0;
-  const pts = occ === 'RES1' ? [[3, 0], [4, 1]] : [[2, 0], [3, 0.9], [4, 1]];
-  if (ds <= pts[0][0]) return 0; if (ds >= 4) return 1;
-  for (let i = 1; i < pts.length; i++) if (ds <= pts[i][0]) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; return y0 + (y1 - y0) * (ds - x0) / (x1 - x0); }
-  return 0; }
+// Expected displaced fraction from R2D's mean loss ratio. Hazus repair-cost ratios are fixed per damage state
+// (0, 2%, 10%, ~41%, 100%), so the mean loss ratio is a weighted sum of the damage-state probabilities, just like
+// Hazus expected displacement (0.9·P(Extensive) + 1.0·P(Complete)). Calibrated against R2D's per-sample damage for
+// this inventory (fits every structure type and design level, incl. High-Code): multi-unit ≈ 1.4 × (LR − 0.02).
+// Houses (RES1) count only at Complete, so only loss above the Moderate level (10%) is attributed to collapse.
+function dispFromLR(lr, occ) { if (!isFinite(lr)) return NaN;
+  const f = occ === 'RES1' ? (lr - 0.1) / 0.9 : 1.4 * (lr - 0.02);
+  return Math.max(0, Math.min(1, f)); }
 function readFile(input, cb) { const f = input.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => cb(r.result, f.name); r.readAsText(f); }
 function loadRun(key, text, name) {
   const lab = { base: 'nBase', A: 'nA', B: 'nB' }[key];
@@ -564,7 +567,10 @@ function renderOutput() {
   let unmatched = 0;
   OUT = INV.map(b => { const o = { b };
     for (const r of runs) { const x = RES[r.key].map.get(b.id); if (!x && r.key === 'base') unmatched++;
-      o[r.key] = x ? { ...x, disp: b.Population * dispWeight(x.ds, b.OccupancyClass) } : { cost: 0, ds: NaN, time: NaN, disp: 0 }; }
+      if (x) { const lr = isFinite(x.lr) ? x.lr : (b.ReplacementCost > 0 ? x.cost / b.ReplacementCost : NaN);
+        const fLR = dispFromLR(lr, b.OccupancyClass);
+        o[r.key] = { ...x, lr, disp: isFinite(fLR) ? b.Population * fLR : 0 }; }
+      else o[r.key] = { cost: 0, ds: NaN, time: NaN, lr: NaN, disp: 0 }; }
     return o; });
   const msgs = [];
   if (unmatched) msgs.push(`${unmatched} inventory buildings were not found in the baseline results (check that IDs match).`);
@@ -648,7 +654,8 @@ $('dlOut').addEventListener('click', () => {
     ReplacementCost: o.b.ReplacementCost, RetrofitCost: o.b.RetrofitCost };
     for (const r of runs) { const p = r.key === 'base' ? 'Baseline' : 'Program' + r.key;
       if (r.key !== 'base') row[p + '_Retrofitted'] = o.b.StructureType === $('outSys' + r.key).value && eligible(o.b);
-      row[p + '_RepairCost'] = o[r.key].cost; row[p + '_DS'] = o[r.key].ds; row[p + '_Displaced'] = o[r.key].disp.toFixed(2); }
+      row[p + '_RepairCost'] = o[r.key].cost; row[p + '_DS'] = o[r.key].ds; row[p + '_Displaced'] = o[r.key].disp.toFixed(2);
+      row[p + '_LossRatio'] = o[r.key].lr; }
     return row; }), 'combined_results.csv');
 });
 

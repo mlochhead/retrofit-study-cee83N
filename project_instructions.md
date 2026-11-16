@@ -83,7 +83,7 @@ system's buildings are old enough to benefit from a retrofit.
    - **Cost to owners**: total, per building and as a percent of building value
    - **Benefit–cost ratio** (savings ÷ cost; above 1 means it pays for itself in this earthquake), **net benefit** (savings − cost) and **cost per resident protected**
 
-   *Displaced residents* follow the Hazus rule: residents of apartment buildings count as displaced if the building's most likely damage is Extensive (90%) or Complete (100%); single-family houses count only for Complete.
+   *Displaced residents* are estimated from each building's **loss ratio** (repair cost ÷ cost to rebuild), which R2D averages over thousands of simulated versions of the earthquake. The more damage a building is expected to have, the more of its residents are expected to lose their homes. For apartment buildings and SROs, the share of residents displaced is 1.4 × (loss ratio − 0.02), up to 100%. For example, a building with a 30% loss ratio displaces about 40% of its residents. Single-family houses count only if they are likely to be completely destroyed. This follows the FEMA Hazus rule, where residents are displaced when their building has Extensive or Complete damage.
 
 ## Deliverables
 
